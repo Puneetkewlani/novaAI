@@ -1,0 +1,22 @@
+[
+  {
+    "id": "nova-overview",
+    "title": "Nova overview",
+    "content": "Nova is a thoughtful AI workspace for exploring ideas, writing, planning, and learning. Conversations are stored in the browser for this demo. Nova can make mistakes, so verify important information before acting on it."
+  },
+  {
+    "id": "nova-plans",
+    "title": "Nova plans",
+    "content": "Nova has three plans. Free costs $0 forever and includes 20 messages per day, Nova 1.0 access, and conversation history. Plus costs $20 per month and includes unlimited messages, advanced Nova models, and priority responses. Pro costs $40 per month and includes everything in Plus, early feature access, and expanded context."
+  },
+  {
+    "id": "nova-privacy",
+    "title": "Nova privacy and data",
+    "content": "Do not add passwords, API keys, financial data, or other sensitive personal information to a knowledge document. Only index documents that you own or are allowed to use. For production deployments, replace the local JSON knowledge store with a persistent vector database and add authentication to ingestion endpoints."
+  },
+  {
+    "id": "rag-guide",
+    "title": "Nova RAG guide",
+    "content": "Retrieval-augmented generation, or RAG, retrieves relevant document chunks for each question and places those chunks in the model context. RAG does not train or fine-tune the model. Run npm run ingest to create embeddings for the local dataset. Without an indexed knowledge file, Nova uses lexical matching over the seed documents."
+  }
+]
