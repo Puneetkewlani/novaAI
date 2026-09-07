@@ -4,6 +4,7 @@ import express from 'express'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import OpenAI from 'openai'
+import { database, databaseEnabled } from './db.js'
 
 const app = express()
 const port = Number(process.env.PORT || 8787)
@@ -92,7 +93,163 @@ function cleanAssistantAnswer(answer) {
 
 app.get('/api/health', async (_request, response) => {
   const entries = await readKnowledge()
-  response.json({ ok: true, configured: Boolean(aiClient), model: chatModel, baseUrl: aiBaseUrl, knowledgeChunks: entries.length })
+  response.json({ ok: true, configured: Boolean(aiClient), database: databaseEnabled, model: chatModel, baseUrl: aiBaseUrl, knowledgeChunks: entries.length })
+})
+
+async function saveAuthUser(authUser, name) {
+  const profile = {
+    id: authUser.id,
+    name: name?.trim() || authUser.user_metadata?.name?.trim() || authUser.email.split('@')[0],
+    email: authUser.email.toLowerCase(),
+    plan: 'Free',
+  }
+  const { data, error } = await database
+    .from('users')
+    .upsert(profile, { onConflict: 'email' })
+    .select('id, name, email, plan')
+    .single()
+  if (error) throw error
+  return data
+}
+
+app.post('/api/auth/signup', async (request, response) => {
+  const { name, email, password, redirectTo } = request.body || {}
+  if (!database) return response.status(503).json({ error: 'Database is not configured.' })
+  if (!name?.trim() || !email?.trim() || !password || password.length < 6) {
+    return response.status(400).json({ error: 'Name, email, and a password with 6+ characters are required.' })
+  }
+  try {
+    const { data, error } = await database.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+      options: {
+        data: { name: name.trim() },
+        ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
+      },
+    })
+    if (error) return response.status(400).json({ error: error.message })
+    const user = await saveAuthUser(data.user, name)
+    response.status(201).json({ user, requiresEmailConfirmation: !data.session })
+  } catch (error) {
+    response.status(500).json({ error: error.message || 'Could not create the account.' })
+  }
+})
+
+app.post('/api/auth/login', async (request, response) => {
+  const { email, password } = request.body || {}
+  if (!database) return response.status(503).json({ error: 'Database is not configured.' })
+  if (!email?.trim() || !password) return response.status(400).json({ error: 'Email and password are required.' })
+  try {
+    const { data, error } = await database.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
+    if (error) return response.status(401).json({ error: 'Invalid email or password.' })
+    const user = await saveAuthUser(data.user)
+    response.json({ user })
+  } catch (error) {
+    response.status(500).json({ error: error.message || 'Could not sign in.' })
+  }
+})
+
+app.post('/api/auth/google', async (request, response) => {
+  if (!database) return response.status(503).json({ error: 'Database is not configured.' })
+  try {
+    const redirectTo = request.body?.redirectTo || 'http://localhost:3000/'
+    const { data, error } = await database.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    })
+    if (error) {
+      const message = error.message.includes('provider is not enabled')
+        ? 'Google sign-in is disabled in Supabase. Enable the Google provider and add its OAuth credentials first.'
+        : error.message
+      return response.status(400).json({ error: message })
+    }
+    response.json({ url: data.url })
+  } catch (error) {
+    response.status(500).json({ error: error.message || 'Could not start Google sign-in.' })
+  }
+})
+
+app.post('/api/auth/github', async (request, response) => {
+  if (!database) return response.status(503).json({ error: 'Database is not configured.' })
+  try {
+    const redirectTo = request.body?.redirectTo || 'http://localhost:3000/'
+    const { data, error } = await database.auth.signInWithOAuth({
+      provider: 'github',
+      options: { redirectTo },
+    })
+    if (error) {
+      const message = error.message.includes('provider is not enabled') || error.message.includes('missing OAuth secret')
+        ? 'GitHub sign-in is not configured in Supabase. Enable GitHub and add its OAuth credentials first.'
+        : error.message
+      return response.status(400).json({ error: message })
+    }
+    response.json({ url: data.url })
+  } catch (error) {
+    response.status(500).json({ error: error.message || 'Could not start GitHub sign-in.' })
+  }
+})
+
+app.post('/api/auth/session', async (request, response) => {
+  const accessToken = request.body?.accessToken
+  if (!database || !accessToken) return response.status(400).json({ error: 'Authentication session is missing.' })
+  try {
+    const { data, error } = await database.auth.getUser(accessToken)
+    if (error || !data.user) return response.status(401).json({ error: 'OAuth sign-in session is invalid.' })
+    const user = await saveAuthUser(data.user)
+    response.json({ user })
+  } catch (error) {
+    response.status(500).json({ error: error.message || 'Could not create the user session.' })
+  }
+})
+
+app.post('/api/users', async (request, response) => {
+  const { name, email, plan = 'Free' } = request.body || {}
+  if (!database) return response.status(503).json({ error: 'Database is not configured.' })
+  if (!name?.trim() || !email?.trim()) return response.status(400).json({ error: 'name and email are required' })
+  const { data, error } = await database
+    .from('users')
+    .upsert({ name: name.trim(), email: email.trim().toLowerCase(), plan }, { onConflict: 'email' })
+    .select('id, name, email, plan')
+    .single()
+  if (error) return response.status(500).json({ error: error.message })
+  response.json(data)
+})
+
+app.get('/api/conversations/:userId', async (request, response) => {
+  if (!database) return response.status(503).json({ error: 'Database is not configured.' })
+  const { data, error } = await database
+    .from('conversations')
+    .select('id, title, messages(id, role, content, attachment, created_at)')
+    .eq('user_id', request.params.userId)
+    .order('created_at', { ascending: true })
+  if (error) return response.status(500).json({ error: error.message })
+  response.json(data.map((conversation) => ({
+    ...conversation,
+    messages: [...(conversation.messages || [])].sort((left, right) => new Date(left.created_at) - new Date(right.created_at)),
+  })))
+})
+
+app.put('/api/conversations/:conversationId', async (request, response) => {
+  const { userId, title, messages = [] } = request.body || {}
+  if (!database) return response.status(503).json({ error: 'Database is not configured.' })
+  if (!userId || !title?.trim() || !Array.isArray(messages)) return response.status(400).json({ error: 'userId, title, and messages are required' })
+  const { error: conversationError } = await database
+    .from('conversations')
+    .upsert({ id: request.params.conversationId, user_id: userId, title: title.trim() })
+  if (conversationError) return response.status(500).json({ error: conversationError.message })
+  const { error: deleteError } = await database.from('messages').delete().eq('conversation_id', request.params.conversationId)
+  if (deleteError) return response.status(500).json({ error: deleteError.message })
+  if (messages.length) {
+    const { error: messageError } = await database.from('messages').insert(messages.map(({ id, role, content, attachment }) => ({
+      id,
+      conversation_id: request.params.conversationId,
+      role,
+      content,
+      attachment: attachment || null,
+    })))
+    if (messageError) return response.status(500).json({ error: messageError.message })
+  }
+  response.status(204).end()
 })
 
 app.get('/api/knowledge', async (_request, response) => {

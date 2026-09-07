@@ -5,7 +5,7 @@ import "./App.css";
 import "./message-format.css";
 
 const starterConversations = [
-  { id: "welcome", title: "Welcome to Nova", messages: [] },
+  { id: crypto.randomUUID(), title: "Welcome to Nova", messages: [] },
 ];
 const prompts = [
   {
@@ -89,7 +89,8 @@ function AuthScreen({ onAuth }) {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const submit = (event) => {
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const submit = async (event) => {
     event.preventDefault();
     if (
       !form.email.includes("@") ||
@@ -103,9 +104,45 @@ function AuthScreen({ onAuth }) {
       );
       return;
     }
-    const name =
-      mode === "register" ? form.name.trim() : form.email.split("@")[0];
-    onAuth({ name, email: form.email, plan: "Free" });
+    setError("");
+    try {
+      const response = await fetch(`/api/auth/${mode === "register" ? "signup" : "login"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          ...(mode === "register"
+            ? { redirectTo: window.location.origin }
+            : {}),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Authentication failed.");
+      if (result.requiresEmailConfirmation) {
+        setError("Account created. Check your email to confirm it, then sign in.");
+        return;
+      }
+      onAuth(result.user);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+  const signInWithProvider = async (provider) => {
+    setGoogleLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/auth/${provider}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ redirectTo: window.location.origin }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `${provider} sign-in failed.`);
+      window.location.assign(result.url);
+    } catch (requestError) {
+      setGoogleLoading(false);
+      setError(requestError.message);
+    }
   };
   return (
     <div className="auth-page">
@@ -213,15 +250,19 @@ function AuthScreen({ onAuth }) {
         </div>
         <button
           className="oauth-button"
-          onClick={() =>
-            onAuth({
-              name: "Alex Morgan",
-              email: "alex@example.com",
-              plan: "Free",
-            })
-          }
+          type="button"
+          onClick={() => signInWithProvider("google")}
+          disabled={googleLoading}
         >
-          ◉ Continue with Google
+          ◉ {googleLoading ? "Connecting..." : "Continue with Google"}
+        </button>
+        <button
+          className="oauth-button"
+          type="button"
+          onClick={() => signInWithProvider("github")}
+          disabled={googleLoading}
+        >
+          ◇ {googleLoading ? "Connecting..." : "Continue with GitHub"}
         </button>
         <p className="auth-switch">
           {mode === "login" ? "New to Nova?" : "Already have an account?"}{" "}
@@ -269,9 +310,24 @@ function App() {
   const messages = activeConversation?.messages || [];
 
   useEffect(() => {
-    user
-      ? localStorage.setItem("nova-user", JSON.stringify(user))
-      : localStorage.removeItem("nova-user");
+    const accessToken = new URLSearchParams(window.location.hash.slice(1)).get("access_token");
+    if (!accessToken) return;
+    fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessToken }),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((result) => {
+        if (result?.user) setUser(result.user);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (user) localStorage.setItem("nova-user", JSON.stringify(user));
+    else localStorage.removeItem("nova-user");
   }, [user]);
   useEffect(() => {
     localStorage.setItem("nova-conversations", JSON.stringify(conversations));
@@ -279,6 +335,45 @@ function App() {
   useEffect(() => {
     localStorage.setItem("nova-theme", theme);
   }, [theme]);
+  useEffect(() => {
+    if (!user || user.id) return;
+    fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(user),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((savedUser) => savedUser && setUser(savedUser))
+      .catch(() => {});
+  }, [user]);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    fetch(`/api/conversations/${user.id}`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((savedConversations) => {
+        if (!cancelled && savedConversations.length) {
+          setConversations(savedConversations);
+          setActiveId(savedConversations[0].id);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+  const saveConversation = (conversation, ownerId = user?.id) => {
+    if (!ownerId) return;
+    fetch(`/api/conversations/${conversation.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: ownerId,
+        title: conversation.title,
+        messages: conversation.messages,
+      }),
+    }).catch(() => {});
+  };
   const startNewChat = () => {
     const conversation = {
       id: crypto.randomUUID(),
@@ -286,6 +381,7 @@ function App() {
       messages: [],
     };
     setConversations((current) => [conversation, ...current]);
+    saveConversation(conversation);
     setActiveId(conversation.id);
     setInput("");
     setAttachment(null);
@@ -322,7 +418,8 @@ function App() {
       setAttachmentError("");
     };
     reader.onerror = () => setAttachmentError("That file could not be read.");
-    isImage ? reader.readAsDataURL(file) : reader.readAsText(file);
+    if (isImage) reader.readAsDataURL(file);
+    else reader.readAsText(file);
   };
   const sendMessage = async (message = input) => {
     const text = message.trim();
@@ -348,17 +445,13 @@ function App() {
         : undefined,
     };
     const nextMessages = [...(conversation?.messages || []), userMessage];
-    setConversations((current) =>
-      current.map((item) =>
-        item.id === activeId
-          ? {
-              ...item,
-              title: item.messages.length ? item.title : displayText.slice(0, 32),
-              messages: nextMessages,
-            }
-          : item,
-      ),
-    );
+    const updatedConversation = {
+      ...conversation,
+      title: conversation.messages.length ? conversation.title : displayText.slice(0, 32),
+      messages: nextMessages,
+    };
+    setConversations((current) => current.map((item) => item.id === activeId ? updatedConversation : item));
+    saveConversation(updatedConversation);
     setInput("");
     setAttachment(null);
     setAttachmentError("");
@@ -388,26 +481,18 @@ function App() {
         role: "assistant",
         content: data.answer,
       };
-      setConversations((current) =>
-        current.map((item) =>
-          item.id === activeId
-            ? { ...item, messages: [...item.messages, reply] }
-            : item,
-        ),
-      );
+      const completedConversation = { ...updatedConversation, messages: [...updatedConversation.messages, reply] };
+      setConversations((current) => current.map((item) => item.id === activeId ? completedConversation : item));
+      saveConversation(completedConversation);
     } catch (error) {
       const reply = {
         id: crypto.randomUUID(),
         role: "assistant",
         content: `I could not reach the AI backend: ${error.message}`,
       };
-      setConversations((current) =>
-        current.map((item) =>
-          item.id === activeId
-            ? { ...item, messages: [...item.messages, reply] }
-            : item,
-        ),
-      );
+      const failedConversation = { ...updatedConversation, messages: [...updatedConversation.messages, reply] };
+      setConversations((current) => current.map((item) => item.id === activeId ? failedConversation : item));
+      saveConversation(failedConversation);
     } finally {
       setIsThinking(false);
     }

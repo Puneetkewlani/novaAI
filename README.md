@@ -178,7 +178,18 @@ GEMINI_API_KEY=your_gemini_api_key
 DATABASE_URL=your_database_url
 ```
 
-### 5. Start the application
+### 5. Configure Supabase persistence
+
+Create a Supabase project, open its SQL Editor, and run [`database/schema.sql`](database/schema.sql). Then copy the Supabase project URL and service role key into `.env`:
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+The service role key is used only by the Express server and must never be added to frontend code. When these variables are present, users and conversations are saved through the `/api/users` and `/api/conversations` endpoints. Without them, the app continues using its local browser storage fallback.
+
+### 6. Start the application
 
 ```bash
 npm run dev
