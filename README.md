@@ -174,6 +174,7 @@ Create a `.env` file:
 
 ```env
 AI_API_KEY=your_api_key
+GEMINI_API_KEY=your_gemini_api_key
 DATABASE_URL=your_database_url
 ```
 

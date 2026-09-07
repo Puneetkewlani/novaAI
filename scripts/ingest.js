@@ -6,11 +6,12 @@ import OpenAI from 'openai'
 const dataDirectory = path.resolve('data')
 const documentsPath = path.join(dataDirectory, 'documents.json')
 const knowledgePath = path.join(dataDirectory, 'knowledge.json')
-const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY
-const baseURL = process.env.AI_BASE_URL || 'https://api.openai.com/v1'
-const embeddingModel = process.env.EMBEDDING_MODEL || 'text-embedding-3-small'
+const usingGemini = Boolean(process.env.GEMINI_API_KEY && !process.env.AI_API_KEY)
+const apiKey = process.env.AI_API_KEY || (usingGemini ? process.env.GEMINI_API_KEY : process.env.OPENAI_API_KEY)
+const baseURL = usingGemini ? 'https://generativelanguage.googleapis.com/v1beta/openai/' : (process.env.AI_BASE_URL || 'https://api.openai.com/v1')
+const embeddingModel = usingGemini ? 'gemini-embedding-001' : (process.env.EMBEDDING_MODEL || 'text-embedding-3-small')
 
-if (!apiKey) throw new Error('Set AI_API_KEY or OPENAI_API_KEY in .env before running npm run ingest.')
+if (!apiKey) throw new Error('Set AI_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY in .env before running npm run ingest.')
 
 const client = new OpenAI({ apiKey, baseURL })
 const documents = JSON.parse(await fs.readFile(documentsPath, 'utf8'))

@@ -374,7 +374,13 @@ function App() {
           })),
         }),
       });
-      const data = await response.json();
+      const responseText = await response.text();
+      let data = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        throw new Error(responseText || `Backend returned HTTP ${response.status}.`);
+      }
       if (!response.ok)
         throw new Error(data.error || "The backend could not respond.");
       const reply = {
