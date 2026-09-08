@@ -8,6 +8,7 @@ import { database, databaseEnabled } from './db.js'
 
 const app = express()
 const port = Number(process.env.PORT || 8787)
+const defaultAppUrl = process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 const dataDirectory = path.resolve('data')
 const knowledgePath = path.join(dataDirectory, 'knowledge.json')
 const documentsPath = path.join(dataDirectory, 'documents.json')
@@ -149,10 +150,16 @@ app.post('/api/auth/login', async (request, response) => {
   }
 })
 
+function getRedirectTo(request) {
+  const configured = request.body?.redirectTo
+  if (configured && configured.trim()) return configured.trim()
+  return defaultAppUrl
+}
+
 app.post('/api/auth/google', async (request, response) => {
   if (!database) return response.status(503).json({ error: 'Database is not configured.' })
   try {
-    const redirectTo = request.body?.redirectTo || 'http://localhost:3000/'
+    const redirectTo = getRedirectTo(request)
     const { data, error } = await database.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },
@@ -172,7 +179,7 @@ app.post('/api/auth/google', async (request, response) => {
 app.post('/api/auth/github', async (request, response) => {
   if (!database) return response.status(503).json({ error: 'Database is not configured.' })
   try {
-    const redirectTo = request.body?.redirectTo || 'http://localhost:3000/'
+    const redirectTo = getRedirectTo(request)
     const { data, error } = await database.auth.signInWithOAuth({
       provider: 'github',
       options: { redirectTo },
