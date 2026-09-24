@@ -104,9 +104,25 @@ async function saveAuthUser(authUser, name) {
     email: authUser.email.toLowerCase(),
     plan: 'Free',
   }
+  const { data: existing, error: lookupError } = await database
+    .from('users')
+    .select('id')
+    .eq('email', profile.email)
+    .maybeSingle()
+  if (lookupError) throw lookupError
+  if (existing) {
+    const { data, error } = await database
+      .from('users')
+      .update({ name: profile.name, plan: profile.plan })
+      .eq('id', existing.id)
+      .select('id, name, email, plan')
+      .single()
+    if (error) throw error
+    return data
+  }
   const { data, error } = await database
     .from('users')
-    .upsert(profile, { onConflict: 'email' })
+    .insert(profile)
     .select('id, name, email, plan')
     .single()
   if (error) throw error
