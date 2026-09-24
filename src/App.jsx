@@ -449,9 +449,6 @@ function App() {
     };
     setConversations((current) => current.map((item) => item.id === activeId ? updatedConversation : item));
     saveConversation(updatedConversation);
-    setInput("");
-    setAttachment(null);
-    setAttachmentError("");
     setIsThinking(true);
     try {
       const response = await fetch("/api/chat", {
@@ -473,6 +470,9 @@ function App() {
       }
       if (!response.ok)
         throw new Error(data.error || "The backend could not respond.");
+      setInput("");
+      setAttachment(null);
+      setAttachmentError("");
       const reply = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -509,7 +509,7 @@ function App() {
 
   return (
     <div className={`app-shell theme-${theme}`}>
-      <aside className="sidebar">
+      <aside className={`sidebar ${openMenu === "mobile-sidebar" ? "mobile-sidebar-open" : ""}`}>
         <div className="brand">
           <span className="brand-mark">N</span>
           <span>nova</span>
@@ -526,6 +526,7 @@ function App() {
               onClick={() => {
                 setActiveId(conversation.id);
                 setView("chat");
+                setOpenMenu(null);
               }}
             >
               <span className="chat-icon">◌</span>
@@ -614,9 +615,21 @@ function App() {
           </div>
         </div>
       </aside>
+      {openMenu === "mobile-sidebar" && (
+        <button
+          className="sidebar-backdrop"
+          aria-label="Close menu"
+          onClick={() => setOpenMenu(null)}
+        />
+      )}
       <main className="main-content">
         <header className="topbar">
-          <button className="mobile-menu" aria-label="Open menu">
+          <button
+            className="mobile-menu"
+            aria-label="Open menu"
+            aria-expanded={openMenu === "mobile-sidebar"}
+            onClick={() => setOpenMenu(openMenu === "mobile-sidebar" ? null : "mobile-sidebar")}
+          >
             ☰
           </button>
           <div className="model-picker">
