@@ -178,7 +178,10 @@ app.post('/api/auth/google', async (request, response) => {
     const redirectTo = getRedirectTo(request)
     const { data, error } = await database.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo },
+      options: {
+        redirectTo,
+        queryParams: { prompt: 'select_account' },
+      },
     })
     if (error) {
       const message = error.message.includes('provider is not enabled')
