@@ -296,6 +296,7 @@ function App() {
     () => localStorage.getItem("nova-theme") || "light",
   );
   const [openMenu, setOpenMenu] = useState(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [view, setView] = useState("chat");
   const [attachment, setAttachment] = useState(null);
   const [attachmentError, setAttachmentError] = useState("");
@@ -384,6 +385,7 @@ function App() {
     setAttachment(null);
     setAttachmentError("");
     setView("chat");
+    setMobileSidebarOpen(false);
     textareaRef.current?.focus();
   };
   const handleAttachment = (event) => {
@@ -509,7 +511,7 @@ function App() {
 
   return (
     <div className={`app-shell theme-${theme}`}>
-      <aside className={`sidebar ${openMenu === "mobile-sidebar" ? "mobile-sidebar-open" : ""}`}>
+      <aside className={`sidebar ${mobileSidebarOpen ? "mobile-sidebar-open" : ""}`}>
         <div className="brand">
           <span className="brand-mark">N</span>
           <span>nova</span>
@@ -527,6 +529,7 @@ function App() {
                 setActiveId(conversation.id);
                 setView("chat");
                 setOpenMenu(null);
+                setMobileSidebarOpen(false);
               }}
             >
               <span className="chat-icon">◌</span>
@@ -595,6 +598,7 @@ function App() {
                   onClick={() => {
                     setView("settings");
                     setOpenMenu(null);
+                    setMobileSidebarOpen(false);
                   }}
                 >
                   ⚙ Account settings
@@ -603,6 +607,7 @@ function App() {
                   onClick={() => {
                     setView("plans");
                     setOpenMenu(null);
+                    setMobileSidebarOpen(false);
                   }}
                 >
                   ♧ Manage plan
@@ -615,11 +620,11 @@ function App() {
           </div>
         </div>
       </aside>
-      {openMenu === "mobile-sidebar" && (
+      {mobileSidebarOpen && (
         <button
           className="sidebar-backdrop"
           aria-label="Close menu"
-          onClick={() => setOpenMenu(null)}
+          onClick={() => setMobileSidebarOpen(false)}
         />
       )}
       <main className="main-content">
@@ -627,8 +632,8 @@ function App() {
           <button
             className="mobile-menu"
             aria-label="Open menu"
-            aria-expanded={openMenu === "mobile-sidebar"}
-            onClick={() => setOpenMenu(openMenu === "mobile-sidebar" ? null : "mobile-sidebar")}
+            aria-expanded={mobileSidebarOpen}
+            onClick={() => setMobileSidebarOpen((open) => !open)}
           >
             ☰
           </button>

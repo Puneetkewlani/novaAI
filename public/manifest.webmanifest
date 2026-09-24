@@ -1,0 +1,17 @@
+{
+  "name": "Nova AI",
+  "short_name": "Nova",
+  "description": "A thoughtful AI workspace for ideas, writing, and everything in between.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f7f4",
+  "theme_color": "#26382d",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
