@@ -111,9 +111,6 @@ function AuthScreen({ onAuth }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          ...(mode === "register"
-            ? { redirectTo: window.location.origin }
-            : {}),
         }),
       });
       const result = await response.json();
@@ -134,7 +131,7 @@ function AuthScreen({ onAuth }) {
       const response = await fetch(`/api/auth/${provider}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ redirectTo: window.location.origin }),
+        body: JSON.stringify({}),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || `${provider} sign-in failed.`);
